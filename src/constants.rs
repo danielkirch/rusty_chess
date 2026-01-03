@@ -1,5 +1,5 @@
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Pieces {
+pub enum Piece {
     Empty = 0,
     WhiteKing = 1,
     WhiteQueen = 2,
