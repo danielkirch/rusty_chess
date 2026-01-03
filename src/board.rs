@@ -1,4 +1,7 @@
-struct Board {
+use crate::constants::Pieces;
+
+#[derive(Clone, Copy)]
+pub struct Board {
     // a1 -> bit 0, h8 -> bit 63
     white_pieces: u64,
     black_pieces: u64,
@@ -11,15 +14,11 @@ struct Board {
     knights: u64,
     pawns: u64,
 
-    white_to_move: bool,
-    allow_castling: u8,
-    en_passant_square: Option<u8>,
-    reversible_move_counter: u8,
-    full_move_counter: u16,
+    pub piece_list: [Pieces; 64], // Maps square index to piece type
 }
 
 impl Board {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Board {
             white_pieces: 0,
             black_pieces: 0,
@@ -30,31 +29,70 @@ impl Board {
             bishops: 0,
             knights: 0,
             pawns: 0,
-            white_to_move: true,
-            allow_castling: 0,
-            en_passant_square: None,
-            reversible_move_counter: 0,
-            full_move_counter: 1,
+            piece_list: [Pieces::Empty; 64],
+        }
+    }
+
+    fn init_piece_list(&mut self) {
+        for i in 0..64 {
+            let field: u64 = 1 << i;
+            if self.occupied_squares & field == 0 {
+                self.piece_list[i] = Pieces::Empty;
+            } else if self.kings & field != 0 {
+                if self.white_pieces & field != 0 {
+                    self.piece_list[i] = Pieces::WhiteKing;
+                } else {
+                    self.piece_list[i] = Pieces::BlackKing;
+                }
+            } else if self.queens & field != 0 {
+                if self.white_pieces & field != 0 {
+                    self.piece_list[i] = Pieces::WhiteQueen;
+                } else {
+                    self.piece_list[i] = Pieces::BlackQueen;
+                }
+            } else if self.rooks & field != 0 {
+                if self.white_pieces & field != 0 {
+                    self.piece_list[i] = Pieces::WhiteRook;
+                } else {
+                    self.piece_list[i] = Pieces::BlackRook;
+                }
+            } else if self.bishops & field != 0 {
+                if self.white_pieces & field != 0 {
+                    self.piece_list[i] = Pieces::WhiteBishop;
+                } else {
+                    self.piece_list[i] = Pieces::BlackBishop;
+                }
+            } else if self.knights & field != 0 {
+                if self.white_pieces & field != 0 {
+                    self.piece_list[i] = Pieces::WhiteKnight;
+                } else {
+                    self.piece_list[i] = Pieces::BlackKnight;
+                }
+            } else if self.pawns & field != 0 {
+                if self.white_pieces & field != 0 {
+                    self.piece_list[i] = Pieces::WhitePawn;
+                } else {
+                    self.piece_list[i] = Pieces::BlackPawn;
+                }
+            }
         }
     }
 
     pub fn starting_position() -> Self {
-        Board {
+        let mut board = Board {
             white_pieces: 0x000000000000FFFF,
             black_pieces: 0xFFFF000000000000,
             occupied_squares: 0xFFFF00000000FFFF,
             kings: 0x1000000000000010,
-            queens: 0x0800000000000080,
+            queens: 0x0800000000000008,
             rooks: 0x8100000000000081,
             bishops: 0x2400000000000024,
             knights: 0x4200000000000042,
             pawns: 0x00FF00000000FF00,
-            white_to_move: true,
-            allow_castling: 0b1111,
-            en_passant_square: None,
-            reversible_move_counter: 0,
-            full_move_counter: 1,
-        }
+            piece_list: [Pieces::Empty; 64],
+        };
+        board.init_piece_list();
+        board
     }
 
     pub fn from_fen(fen: &str) -> Result<Self, String> {
@@ -72,7 +110,7 @@ impl Board {
         // Initialize the board
         let mut board = Board::new();
 
-        // Part 1: Parse piece placement
+        // Parse piece placement
         for (rank, piece_row) in pieces.iter().rev().enumerate() {
             if piece_row.len() > 8 {
                 return Err("Invalid FEN string".to_string());
@@ -105,42 +143,24 @@ impl Board {
                 square += 1;
             }
         }
-
-        // Part 2: Active color
-        board.white_to_move = match parts[1] {
-            "w" => true,
-            "b" => false,
-            _ => return Err("Invalid FEN string".to_string()),
-        };
-
-        // Part 3: Castling availability
-        board.allow_castling = 0;
-        for c in parts[2].chars() {
-            match c {
-                'K' => board.allow_castling |= 0b0001,
-                'Q' => board.allow_castling |= 0b0010,
-                'k' => board.allow_castling |= 0b0100,
-                'q' => board.allow_castling |= 0b1000,
-                '-' => (),
-                _ => return Err("Invalid FEN string".to_string()),
-            }
-        }
-
-        // Part 4: En passant target square
-        if parts[3] != "-" {
-            let file = parts[3].chars().next().unwrap() as u8 - 'a' as u8;
-            let rank = parts[3].chars().nth(1).unwrap() as u8 - '1' as u8;
-            board.en_passant_square = Some(file + rank * 8);
-        }
-
-        // Part 5: Halfmove clock
-        board.reversible_move_counter = parts[4].parse().unwrap();
-
-        // Part 6: Fullmove number
-        board.full_move_counter = parts[5].parse().unwrap();
+        board.init_piece_list();
 
         Ok(board)
     }
+}
+
+pub fn print_bitboard(bitboard: u64) -> String {
+    let mut board = String::new();
+    for rank in (0..8).rev() {
+        for file in 0..8 {
+            let mask = 1u64 << (rank * 8 + file);
+            let char = if bitboard & mask != 0 { '1' } else { '0' };
+            board.push(char);
+        }
+        board.push('\n');
+    }
+    println!("{}", board);
+    board
 }
 
 #[cfg(test)]
@@ -153,16 +173,11 @@ mod tests {
         assert_eq!(board.white_pieces, 0x000000000000FFFF);
         assert_eq!(board.black_pieces, 0xFFFF000000000000);
         assert_eq!(board.kings, 0x1000000000000010);
-        assert_eq!(board.queens, 0x0800000000000080);
+        assert_eq!(board.queens, 0x0800000000000008);
         assert_eq!(board.rooks, 0x8100000000000081);
         assert_eq!(board.bishops, 0x2400000000000024);
         assert_eq!(board.knights, 0x4200000000000042);
         assert_eq!(board.pawns, 0x00FF00000000FF00);
-        assert!(board.white_to_move);
-        assert_eq!(board.allow_castling, 0b1111);
-        assert_eq!(board.en_passant_square, None);
-        assert_eq!(board.reversible_move_counter, 0);
-        assert_eq!(board.full_move_counter, 1);
     }
 
     #[test]
@@ -172,17 +187,15 @@ mod tests {
         let board = Board::from_fen(fen).unwrap();
         assert_eq!(board.white_pieces, 0x000000000000FFFF);
         assert_eq!(board.black_pieces, 0xFFFF000000000000);
+        assert_eq!(board.occupied_squares, 0xFFFF00000000FFFF);
         assert_eq!(board.kings, 0x1000000000000010);
         assert_eq!(board.queens, 0x0800000000000008);
         assert_eq!(board.rooks, 0x8100000000000081);
         assert_eq!(board.bishops, 0x2400000000000024);
         assert_eq!(board.knights, 0x4200000000000042);
         assert_eq!(board.pawns, 0x00FF00000000FF00);
-        assert!(board.white_to_move);
-        assert_eq!(board.allow_castling, 0b1111);
-        assert_eq!(board.en_passant_square, None);
-        assert_eq!(board.reversible_move_counter, 0);
-        assert_eq!(board.full_move_counter, 1);
+        assert_eq!(board.piece_list[0], Pieces::WhiteRook);
+        assert_eq!(board.piece_list[60], Pieces::BlackKing);
     }
 
     #[test]
@@ -198,11 +211,8 @@ mod tests {
         assert_eq!(board.bishops, 0x2400000000000024);
         assert_eq!(board.knights, 0x4200000000000042);
         assert_eq!(board.pawns, 0x00EF00101000EF00); // e4 and e5 pawns
-        assert!(board.white_to_move);
-        assert_eq!(board.allow_castling, 0b1111);
-        assert_eq!(board.en_passant_square, Some(44)); // e6
-        assert_eq!(board.reversible_move_counter, 0);
-        assert_eq!(board.full_move_counter, 2);
+        assert_eq!(board.piece_list[28], Pieces::WhitePawn); // e4
+        assert_eq!(board.piece_list[36], Pieces::BlackPawn); // e5
     }
 
     #[test]
@@ -212,16 +222,24 @@ mod tests {
         let board = Board::from_fen(fen).unwrap();
         assert_eq!(board.white_pieces, 0x000000001000FFEF);
         assert_eq!(board.black_pieces, 0xFFEF001000000000);
+        assert_eq!(board.occupied_squares, 0xFFEF00101000FFEF);
         assert_eq!(board.kings, 0x1000000000001000);
         assert_eq!(board.queens, 0x0800000000000008);
         assert_eq!(board.rooks, 0x8100000000000081);
         assert_eq!(board.bishops, 0x2400000000000024);
         assert_eq!(board.knights, 0x4200000000000042);
         assert_eq!(board.pawns, 0x00EF00101000EF00); // e4 and e5 pawns
-        assert!(!board.white_to_move);
-        assert_eq!(board.allow_castling, 0b1100); // only black can castle
-        assert_eq!(board.en_passant_square, None);
-        assert_eq!(board.reversible_move_counter, 1);
-        assert_eq!(board.full_move_counter, 2);
+        assert_eq!(board.piece_list[28], Pieces::WhitePawn); // e4
+        assert_eq!(board.piece_list[36], Pieces::BlackPawn); // e5
+        assert_eq!(board.piece_list[12], Pieces::WhiteKing); // e2
+    }
+
+    #[test]
+    fn test_print_bitboard() {
+        let bitboard: u64 = 0xFFEF00101000FFEF;
+        let expected_output =
+            "11111111\n11110111\n00000000\n00001000\n00001000\n00000000\n11111111\n11110111\n";
+        let output = print_bitboard(bitboard);
+        assert_eq!(output, expected_output);
     }
 }
