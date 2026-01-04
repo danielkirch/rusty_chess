@@ -69,6 +69,9 @@ impl UciInterface {
             // Set up position from FEN
             let fen = parts[0][4..].trim();
             self.game = Some(Game::from_fen(fen));
+        } else {
+            println!("info invalid position command {}", command);
+            return;
         }
 
         // Apply moves if any

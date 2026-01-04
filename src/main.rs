@@ -1,5 +1,6 @@
 mod board;
 mod constants;
+mod evaluation;
 mod game;
 mod game_history;
 mod game_state;
